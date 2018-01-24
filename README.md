@@ -19,9 +19,9 @@ There is also a startup file in etc/rc.d/blacklistd
 
 Patches to various daemons to add blacklisting capabilitiers are in the
 "diff" directory:
-    - OpenSSH: diff/ssh.diff   [tcp socket example]
-    - Bind:    diff/named.diff [both tcp and udp]
-    - ftpd:    diff/ftpd.diff  [tcp]
+  - OpenSSH: diff/ssh.diff   [tcp socket example]
+  - Bind:    diff/named.diff [both tcp and udp]
+  - ftpd:    diff/ftpd.diff  [tcp]
 
 These patches have been applied to NetBSD-current.
 
