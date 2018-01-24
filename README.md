@@ -54,12 +54,12 @@ peer information to blacklistd via:
 
 The configuration file contains entries of the form:
 
-     Blacklist rule
-     host/Port        type    protocol   owner  name  nfail  disable
-    192.168.1.1:ssh   stream    tcp        *    -int   10       1m
-    8.8.8.8:ssh       stream    tcp        *    -ext    6      60m
-    ssh	              stream    tcp6       *      *     6      60m
-    http              stream    tcp        *      *     6      60m
+    Blacklist rule
+    host/Port         type   protocol  owner  name  nfail  disable
+    192.168.1.1:ssh  stream    tcp       *    -int   10       1m
+    8.8.8.8:ssh      stream    tcp       *    -ext    6      60m
+    ssh	             stream    tcp6      *      *     6      60m
+    http             stream    tcp       *      *     6      60m
 
 Here note that owner is * because the connection is done from the
 child ssh socket which runs with user privs. We treat ipv4 connections
