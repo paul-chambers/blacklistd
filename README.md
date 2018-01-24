@@ -100,15 +100,14 @@ called blacklistd as follows:
         ...
     }
 
-You can use 'blacklistctl dump -a' to list all the current entries
-in the database; the ones that have nfail [c]/[t] where [c]urrent
->= [t]otal, should have an id assosiated with them; this means that
-there is a packet filter rule added for that entry. For npf, you
-can examine the packet filter dynamic rule entries using 'npfctl
-rule <rulename> list'.  The number of current entries can exceed
-the total. This happens because entering packet filter rules is
-asynchronous; there could be other connection before the rule
-becomes activated.
+You can use 'blacklistctl dump -a' to list all the current entries in the
+database; the ones that have nfail [c]/[t] where [c]urrent >= [t]otal, 
+should have an id assosiated with them; this means that there is a packet
+filter rule added for that entry. For npf, you can examine the packet
+filter dynamic rule entries using 'npfctl rule <rulename> list'.
+The number of current entries can exceed the total. This happens because
+entering packet filter rules is asynchronous; there could be other
+connection before the rule becomes activated.
 
 Enjoy,
 
