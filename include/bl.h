@@ -1,4 +1,4 @@
-/*	$NetBSD: bl.h,v 1.12 2015/01/22 16:19:53 christos Exp $	*/
+/*	$NetBSD: bl.h,v 1.13 2016/03/11 17:16:40 christos Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -40,7 +40,9 @@
 typedef enum {
 	BL_INVALID,
 	BL_ADD,
-	BL_DELETE
+	BL_DELETE,
+	BL_ABUSE,
+	BL_BADUSER
 } bl_type_t;
 
 typedef struct {
@@ -56,7 +58,7 @@ typedef struct {
 #define bi_cred bi_u._bi_cred
 
 #ifndef _PATH_BLSOCK
-#define _PATH_BLSOCK "/var/run/blsock"
+#define _PATH_BLSOCK "/var/run/blacklistd.sock"
 #endif
 
 __BEGIN_DECLS
