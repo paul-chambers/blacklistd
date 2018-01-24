@@ -1,4 +1,6 @@
-# $NetBSD: README,v 1.8 2017/04/13 17:59:34 christos Exp $
+# blacklistd
+
+ $NetBSD: README,v 1.8 2017/04/13 17:59:34 christos Exp $
 
 This package contains library that can be used by network daemons to
 communicate with a packet filter via a daemon to enforce opening and
@@ -17,9 +19,9 @@ There is also a startup file in etc/rc.d/blacklistd
 
 Patches to various daemons to add blacklisting capabilitiers are in the
 "diff" directory:
-    - OpenSSH: diff/ssh.diff [tcp socket example]
-    - Bind: diff/named.diff [both tcp and udp]
-    - ftpd: diff/ftpd.diff [tcp]
+    - OpenSSH: diff/ssh.diff   [tcp socket example]
+    - Bind:    diff/named.diff [both tcp and udp]
+    - ftpd:    diff/ftpd.diff  [tcp]
 
 These patches have been applied to NetBSD-current.
 
@@ -28,36 +30,36 @@ a unix socket like syslog. The library calls are simple and everything
 is handled by the library. In the simplest form the only thing the
 daemon needs to do is to call:
 
-	blacklist(action, acceptedfd, message);
+    blacklist(action, acceptedfd, message);
 
 Where:
-	action = 0 -> successful login clear blacklist state
-		 1 -> failed login, add to the failed count
-	acceptedfd -> the file descriptor where the server is
-		      connected to the remote client. It is used
-		      to determine the listening socket, and the
-		      remote address. This allows any program to
-		      contact the blacklist daemon, since the verification
-		      if the program has access to the listening
-		      socket is done by virtue that the port
-		      number is retrieved from the kernel.
-	message    -> an optional string that is used in debugging logs.
+    action = 0 -> successful login clear blacklist state
+             1 -> failed login, add to the failed count
+    acceptedfd -> the file descriptor where the server is
+                  connected to the remote client. It is used
+                  to determine the listening socket, and the
+                  remote address. This allows any program to
+                  contact the blacklist daemon, since the verification
+                  if the program has access to the listening
+                  socket is done by virtue that the port
+                  number is retrieved from the kernel.
+    message    -> an optional string that is used in debugging logs.
 
 Unfortunately there is no way to get information about the "peer"
 from a udp socket, because there is no connection and that information
 is kept with the server. In that case the daemon can provide the
 peer information to blacklistd via:
 
-	blacklist_sa(action, acceptedfd, sockaddr, sockaddr_len, message);
+    blacklist_sa(action, acceptedfd, sockaddr, sockaddr_len, message);
 
 The configuration file contains entries of the form:
 
-# Blacklist rule
-# host/Port	type	protocol	owner	name	nfail	disable
-192.168.1.1:ssh	stream	tcp		*	-int	10	1m
-8.8.8.8:ssh	stream	tcp		*	-ext	6	60m
-ssh		stream	tcp6		*	*	6	60m
-http		stream	tcp		*	*	6	60m
+     Blacklist rule
+     host/Port        type    protocol   owner  name  nfail  disable
+    192.168.1.1:ssh   stream    tcp        *    -int   10       1m
+    8.8.8.8:ssh       stream    tcp        *    -ext    6      60m
+    ssh	              stream    tcp6       *      *     6      60m
+    http              stream    tcp        *      *     6      60m
 
 Here note that owner is * because the connection is done from the
 child ssh socket which runs with user privs. We treat ipv4 connections
@@ -82,25 +84,25 @@ dynamic rule feature. You need to create a dynamic rule in your
 /etc/npf.conf on the group referring to the interface you want to block
 called blacklistd as follows:
 
-ext_if=bge0
-int_if=sk0
-	
-group "external" on $ext_if {
-	...
+    ext_if=bge0
+    int_if=sk0
+    
+    group "external" on $ext_if {
+        ...
         ruleset "blacklistd-ext" 
         ruleset "blacklistd" 
-	...
-}
-
-group "internal" on $int_if {
-	...
+        ...
+    }
+    
+    group "internal" on $int_if {
+        ...
         ruleset "blacklistd-int" 
-	...
-}
+        ...
+    }
 
 You can use 'blacklistctl dump -a' to list all the current entries
-in the database; the ones that have nfail <c>/<t> where <c>urrent
->= <t>otal, should have an id assosiated with them; this means that
+in the database; the ones that have nfail [c]/[t] where [c]urrent
+>= [t]otal, should have an id assosiated with them; this means that
 there is a packet filter rule added for that entry. For npf, you
 can examine the packet filter dynamic rule entries using 'npfctl
 rule <rulename> list'.  The number of current entries can exceed
