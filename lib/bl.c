@@ -1,4 +1,4 @@
-/*	$NetBSD: bl.c,v 1.26 2015/05/28 01:01:37 christos Exp $	*/
+/*	$NetBSD: bl.c,v 1.28 2016/07/29 17:13:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bl.c,v 1.26 2015/05/28 01:01:37 christos Exp $");
+__RCSID("$NetBSD: bl.c,v 1.28 2016/07/29 17:13:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -53,6 +53,9 @@ __RCSID("$NetBSD: bl.c,v 1.26 2015/05/28 01:01:37 christos Exp $");
 #include <errno.h>
 #include <stdarg.h>
 #include <netinet/in.h>
+#ifdef _REENTRANT
+#include <pthread.h>
+#endif
 
 #include "bl.h"
 
@@ -66,6 +69,16 @@ typedef struct {
 } bl_message_t;
 
 struct blacklist {
+#ifdef _REENTRANT
+	pthread_mutex_t b_mutex;
+# define BL_INIT(b)	pthread_mutex_init(&b->b_mutex, NULL)
+# define BL_LOCK(b)	pthread_mutex_lock(&b->b_mutex)
+# define BL_UNLOCK(b)	pthread_mutex_unlock(&b->b_mutex)
+#else
+# define BL_INIT(b)	do {} while(/*CONSTCOND*/0)
+# define BL_LOCK(b)	BL_INIT(b)
+# define BL_UNLOCK(b)	BL_INIT(b)
+#endif
 	int b_fd;
 	int b_connected;
 	struct sockaddr_un b_sun;
@@ -88,13 +101,17 @@ bl_getfd(bl_t b)
 }
 
 static void
-bl_reset(bl_t b)
+bl_reset(bl_t b, bool locked)
 {
 	int serrno = errno;
+	if (!locked)
+		BL_LOCK(b);
 	close(b->b_fd);
 	errno = serrno;
 	b->b_fd = -1;
 	b->b_connected = -1;
+	if (!locked)
+		BL_UNLOCK(b);
 }
 
 static void
@@ -129,12 +146,15 @@ bl_init(bl_t b, bool srv)
 #define SOCK_NOSIGPIPE 0
 #endif
 
+	BL_LOCK(b);
+
 	if (b->b_fd == -1) {
 		b->b_fd = socket(PF_LOCAL,
 		    SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK|SOCK_NOSIGPIPE, 0);
 		if (b->b_fd == -1) {
-			bl_log(b->b_fun, LOG_ERR, "%s: socket failed (%m)",
-			    __func__);
+			bl_log(b->b_fun, LOG_ERR, "%s: socket failed (%s)",
+			    __func__, strerror(errno));
+			BL_UNLOCK(b);
 			return -1;
 		}
 #if SOCK_CLOEXEC == 0
@@ -153,9 +173,16 @@ bl_init(bl_t b, bool srv)
 #endif
 	}
 
-	if (bl_isconnected(b))
+	if (bl_isconnected(b)) {
+		BL_UNLOCK(b);
 		return 0;
+	}
 
+	/*
+	 * We try to connect anyway even when we are a server to verify
+	 * that no other server is listening to the socket. If we succeed
+	 * to connect and we are a server, someone else owns it.
+	 */
 	rv = connect(b->b_fd, (const void *)sun, (socklen_t)sizeof(*sun));
 	if (rv == 0) {
 		if (srv) {
@@ -173,10 +200,11 @@ bl_init(bl_t b, bool srv)
 			 */
 			if (b->b_connected != 1) {
 				bl_log(b->b_fun, LOG_DEBUG,
-				    "%s: connect failed for `%s' (%m)",
-				    __func__, sun->sun_path);
+				    "%s: connect failed for `%s' (%s)",
+				    __func__, sun->sun_path, strerror(errno));
 				b->b_connected = 1;
 			}
+			BL_UNLOCK(b);
 			return -1;
 		}
 		bl_log(b->b_fun, LOG_DEBUG, "Connected to blacklist server",
@@ -192,8 +220,8 @@ bl_init(bl_t b, bool srv)
 		errno = serrno;
 		if (rv == -1) {
 			bl_log(b->b_fun, LOG_ERR,
-			    "%s: bind failed for `%s' (%m)",
-			    __func__, sun->sun_path);
+			    "%s: bind failed for `%s' (%s)",
+			    __func__, sun->sun_path, strerror(errno));
 			goto out;
 		}
 	}
@@ -232,14 +260,17 @@ bl_init(bl_t b, bool srv)
 	if (setsockopt(b->b_fd, CRED_LEVEL, CRED_NAME,
 	    &one, (socklen_t)sizeof(one)) == -1) {
 		bl_log(b->b_fun, LOG_ERR, "%s: setsockopt %s "
-		    "failed (%m)", __func__, __STRING(CRED_NAME));
+		    "failed (%s)", __func__, __STRING(CRED_NAME),
+		    strerror(errno));
 		goto out;
 	}
 #endif
 
+	BL_UNLOCK(b);
 	return 0;
 out:
-	bl_reset(b);
+	bl_reset(b, true);
+	BL_UNLOCK(b);
 	return -1;
 }
 
@@ -252,6 +283,7 @@ bl_create(bool srv, const char *path, void (*fun)(int, const char *, va_list))
 	b->b_fun = fun == NULL ? vsyslog : fun;
 	b->b_fd = -1;
 	b->b_connected = -1;
+	BL_INIT(b);
 
 	memset(&b->b_sun, 0, sizeof(b->b_sun));
 	b->b_sun.sun_family = AF_LOCAL;
@@ -265,14 +297,15 @@ bl_create(bool srv, const char *path, void (*fun)(int, const char *, va_list))
 	return b;
 out:
 	free(b);
-	bl_log(fun, LOG_ERR, "%s: malloc failed (%m)", __func__);
+	bl_log(fun, LOG_ERR, "%s: malloc failed (%s)", __func__,
+	    strerror(errno));
 	return NULL;
 }
 
 void
 bl_destroy(bl_t b)
 {
-	bl_reset(b);
+	bl_reset(b, false);
 	free(b);
 }
 
@@ -377,7 +410,7 @@ again:
 		return -1;
 
 	if ((sendmsg(b->b_fd, &msg, 0) == -1) && tried++ < NTRIES) {
-		bl_reset(b);
+		bl_reset(b, false);
 		goto again;
 	}
 	return tried >= NTRIES ? -1 : 0;
@@ -420,7 +453,8 @@ bl_recv(bl_t b)
 
         rlen = recvmsg(b->b_fd, &msg, 0);
         if (rlen == -1) {
-		bl_log(b->b_fun, LOG_ERR, "%s: recvmsg failed (%m)", __func__);
+		bl_log(b->b_fun, LOG_ERR, "%s: recvmsg failed (%s)", __func__,
+		    strerror(errno));
 		return NULL;
         }
 
